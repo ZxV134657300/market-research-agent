@@ -15,8 +15,14 @@ from datetime import datetime, timedelta
 from typing import Optional
 
 import socket
-socket.setdefaulttimeout(15)  # RSS 源响应较慢，延长超时
+socket.setdefaulttimeout(30)  # 全局超时 30 秒
 import feedparser
+import urllib.request
+
+# 配置 feedparser 超时处理器
+_feed_handler = urllib.request.HTTPHandler(timeout=30)
+_feed_https_handler = urllib.request.HTTPSHandler(timeout=30)
+_feed_opener = urllib.request.build_opener(_feed_handler, _feed_https_handler)
 
 # [Firecrawl] 导入 Firecrawl 服务
 from backend.services.firecrawl_service import get_firecrawl_service
@@ -139,7 +145,8 @@ def _fetch_single_source(source: dict, seen_hashes: set) -> tuple[list[dict], in
         return articles, skipped, error_msg
 
     try:
-        feed = feedparser.parse(source["url"])
+        # 使用配置超时的 opener 解析 RSS
+        feed = feedparser.parse(source["url"], handlers=[_feed_handler, _feed_https_handler])
 
         if feed.bozo and not feed.entries:
             error_msg = f"RSS 解析失败: {getattr(feed, 'bozo_exception', 'unknown')}"

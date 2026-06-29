@@ -7,6 +7,9 @@ v2.0 优化：
 - 内容质量过滤（长度、导航关键词检测）
 - URL 黑名单（跳过评论/登录/搜索页）
 - 智能正文提取（从导航混杂的内容中提取正文）
+
+v2.1 修复：
+- SSL 证书验证失败问题（通过环境变量控制）
 """
 
 import os
@@ -16,6 +19,12 @@ import logging
 from datetime import datetime
 from typing import Optional
 from urllib.parse import urlparse
+
+# 允许通过环境变量禁用 Firecrawl 的 SSL 验证（仅影响 firecrawl 库）
+if os.getenv("FIRECRAWL_DISABLE_SSL", "").lower() in ("1", "true", "yes"):
+    os.environ['CURL_CA_BUNDLE'] = ''
+    os.environ['REQUESTS_CA_BUNDLE'] = ''
+    logging.getLogger("firecrawl_service").info("Firecrawl SSL 验证已禁用（通过环境变量 FIRECRAWL_DISABLE_SSL）")
 
 # 确保项目根目录在 Python 路径中
 ROOT_DIR = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
