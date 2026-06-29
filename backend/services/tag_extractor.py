@@ -246,7 +246,10 @@ class TagExtractor:
 现在请处理：
 {', '.join(candidate_tags)}"""
 
-            response = llm.chat(prompt)
+            response, error = llm.chat(prompt)
+            if error:
+                print(f"[标签精炼] LLM 调用失败: {error}")
+                return candidate_tags[:self.top_k]
             refined = [t.strip() for t in response.split(',') if t.strip()]
             # 二次过滤黑名单
             refined = [t for t in refined if t not in self.TAG_BLACKLIST]

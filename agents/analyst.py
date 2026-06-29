@@ -126,7 +126,18 @@ class AnalystAgent:
 5. 与历史数据的对比（如有历史数据）"""
 
         try:
-            response = call_llm(prompt, self.SYSTEM_PROMPT)
+            response, error = call_llm(prompt, self.SYSTEM_PROMPT)
+            if error:
+                return {
+                    "trends": {
+                        "market_growth": "LLM 调用失败，无法分析趋势",
+                        "brand_trends": {},
+                        "emerging_patterns": [],
+                        "risk_factors": [],
+                    },
+                    "historical_context": f"分析失败: {error}",
+                    "key_insights": ["LLM 调用失败，请检查日志"],
+                }
             response = response.strip()
             if response.startswith("```"):
                 response = response.split("```")[1]

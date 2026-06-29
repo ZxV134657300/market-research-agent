@@ -92,7 +92,16 @@ class CollectorAgent:
         prompt = f"请从以下市场文档中提取关键实体：\n\n{text[:6000]}"
 
         try:
-            response = call_llm(prompt, self.SYSTEM_PROMPT)
+            response, error = call_llm(prompt, self.SYSTEM_PROMPT)
+            if error:
+                return {
+                    "brands": [],
+                    "numbers": {},
+                    "time_periods": [],
+                    "positive_feedback": [],
+                    "negative_feedback": [],
+                    "key_findings": [],
+                }
             # 尝试解析 JSON
             response = response.strip()
             if response.startswith("```"):

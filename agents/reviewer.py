@@ -121,7 +121,9 @@ class ReviewerAgent:
 请返回修正后的完整报告。对于无法溯源的数字，请删除或改为定性描述。"""
 
         try:
-            revised = call_llm(prompt, self.SYSTEM_PROMPT, temperature=0.2)
+            revised, error = call_llm(prompt, self.SYSTEM_PROMPT, temperature=0.2)
+            if error:
+                return draft, revision_count
             revision_count += 1
             return revised, revision_count
         except Exception:
