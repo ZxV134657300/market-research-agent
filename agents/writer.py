@@ -6,6 +6,10 @@ v2.0 增强：
 - 完善错误处理，捕获异常并返回错误信息
 - 记录详细日志
 - 支持错误恢复
+
+v2.1 增强：
+- 调用前打印 prompt 长度和摘要
+- 便于排查超大 prompt 问题
 """
 
 import json
@@ -118,16 +122,30 @@ class WriterAgent:
         try:
             # 构建提示词
             prompt = self._build_prompt(collector_output, analyst_output)
-            logger.info(f"📝 提示词构建完成，长度: {len(prompt)} 字符")
+
+            # 打印 prompt 详细信息
+            logger.info(f"📝 提示词构建完成:")
+            logger.info(f"   总长度: {len(prompt)} 字符")
+            logger.info(f"   预估 tokens: ~{len(prompt) // 2} tokens")
+            logger.info(f"   前 500 字符预览:")
+            logger.info(f"   {prompt[:500]}...")
+            logger.info(f"   后 200 字符预览:")
+            logger.info(f"   ...{prompt[-200:]}")
+
+            # 检查 prompt 是否过长
+            if len(prompt) > 50000:
+                logger.warning(f"⚠️ Prompt 非常长 ({len(prompt)} 字符)，可能导致超时")
 
             # 调用 LLM
             logger.info("🚀 调用 LLM 生成报告...")
+            logger.info("   timeout: 300s, max_tokens: 8192")
+
             draft, error = call_llm(
                 prompt,
                 self.SYSTEM_PROMPT,
                 temperature=0.4,
-                max_tokens=4096,
-                timeout=180.0,
+                max_tokens=8192,
+                timeout=300.0,
             )
 
             if error:

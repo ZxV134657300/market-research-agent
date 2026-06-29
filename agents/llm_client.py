@@ -2,17 +2,20 @@
 LLM 客户端工具模块
 封装 DeepSeek API 调用（兼容 OpenAI SDK）
 
-v2.0 增强：
+v3.0 增强：
 - 详细错误日志（捕获 APIConnectionError, TimeoutError, APIStatusError）
-- 超时设置 180 秒，适配大 prompt
-- 重试时打印具体异常信息
-- 支持环境变量检查
+- 超时设置 300 秒，适配超大 prompt
+- 代理支持（HTTP_PROXY, HTTPS_PROXY）
+- base_url 格式验证
+- max_tokens 设置为 8192
+- 请求前打印 prompt 摘要
 """
 
 import os
 import sys
 import logging
 from typing import Optional
+from urllib.parse import urlparse
 
 from openai import OpenAI, APIConnectionError, APITimeoutError, APIStatusError, RateLimitError
 
@@ -36,6 +39,8 @@ def check_env_variables() -> dict:
         "DEEPSEEK_API_KEY": os.getenv("DEEPSEEK_API_KEY", "未设置"),
         "BASE_URL": os.getenv("BASE_URL", "未设置"),
         "MODEL_NAME": os.getenv("MODEL_NAME", "未设置"),
+        "HTTP_PROXY": os.getenv("HTTP_PROXY", "未设置"),
+        "HTTPS_PROXY": os.getenv("HTTPS_PROXY", "未设置"),
     }
 
     # 隐藏 API Key 中间部分
@@ -46,28 +51,77 @@ def check_env_variables() -> dict:
     return env_status
 
 
+def _normalize_base_url(url: str) -> str:
+    """
+    规范化 base_url，移除末尾斜杠和多余空格
+
+    Args:
+        url: 原始 URL
+
+    Returns:
+        规范化后的 URL
+    """
+    url = url.strip().rstrip("/")
+    if not url.startswith("http"):
+        url = "https://" + url
+    return url
+
+
 def get_llm_client() -> OpenAI:
     """
     获取 OpenAI 兼容的 LLM 客户端
 
     配置说明：
-    - timeout=180.0: 3 分钟超时，适配写手官大 prompt
+    - timeout=300.0: 5 分钟超时，适配超大 prompt
     - max_retries=3: 失败自动重试 3 次
+    - 支持代理配置
     """
     api_key = os.getenv("DEEPSEEK_API_KEY", "sk-placeholder")
     base_url = os.getenv("BASE_URL", "https://api.deepseek.com")
 
+    # 规范化 base_url
+    base_url = _normalize_base_url(base_url)
+
     if api_key == "sk-placeholder":
         logger.warning("⚠️ DEEPSEEK_API_KEY 未设置，使用占位符")
 
-    client = OpenAI(
-        api_key=api_key,
-        base_url=base_url,
-        timeout=180.0,      # 3 分钟超时
-        max_retries=3,       # 失败自动重试 3 次
-    )
+    # 获取代理配置
+    http_proxy = os.getenv("HTTP_PROXY") or os.getenv("http_proxy")
+    https_proxy = os.getenv("HTTPS_PROXY") or os.getenv("https_proxy")
 
-    logger.info(f"LLM 客户端初始化完成: base_url={base_url}, model={os.getenv('MODEL_NAME', 'deepseek-chat')}")
+    # 构建客户端参数
+    client_kwargs = {
+        "api_key": api_key,
+        "base_url": base_url,
+        "timeout": 300.0,      # 5 分钟超时
+        "max_retries": 3,       # 失败自动重试 3 次
+    }
+
+    # 如果有代理配置，添加到 http_client
+    if http_proxy or https_proxy:
+        try:
+            import httpx
+            proxy = https_proxy or http_proxy
+            http_client = httpx.Client(
+                proxy=proxy,
+                timeout=httpx.Timeout(300.0),
+                verify=False,  # 禁用 SSL 验证（代理环境可能需要）
+            )
+            client_kwargs["http_client"] = http_client
+            logger.info(f"🌐 使用代理: {proxy}")
+        except ImportError:
+            logger.warning("⚠️ httpx 未安装，无法配置代理")
+
+    client = OpenAI(**client_kwargs)
+
+    logger.info(f"🚀 LLM 客户端初始化完成:")
+    logger.info(f"   base_url: {base_url}")
+    logger.info(f"   model: {os.getenv('MODEL_NAME', 'deepseek-chat')}")
+    logger.info(f"   timeout: 300s")
+    logger.info(f"   max_retries: 3")
+    if http_proxy or https_proxy:
+        logger.info(f"   proxy: {https_proxy or http_proxy}")
+
     return client
 
 
@@ -75,8 +129,8 @@ def call_llm(
     prompt: str,
     system_prompt: str = "",
     temperature: float = 0.3,
-    max_tokens: int = 4096,
-    timeout: float = 180.0,
+    max_tokens: int = 8192,
+    timeout: float = 300.0,
 ) -> tuple[str, Optional[str]]:
     """
     调用 LLM 获取响应
@@ -85,7 +139,7 @@ def call_llm(
         prompt: 用户提示
         system_prompt: 系统提示
         temperature: 温度参数
-        max_tokens: 最大生成 token 数
+        max_tokens: 最大生成 token 数（DeepSeek 支持 8192）
         timeout: 超时时间（秒）
 
     Returns:
@@ -93,15 +147,24 @@ def call_llm(
     """
     client = get_llm_client()
     model = os.getenv("MODEL_NAME", "deepseek-chat")
+    base_url = os.getenv("BASE_URL", "https://api.deepseek.com")
 
     messages = []
     if system_prompt:
         messages.append({"role": "system", "content": system_prompt})
     messages.append({"role": "user", "content": prompt})
 
-    # 记录请求信息
+    # 记录请求信息（包含 prompt 摘要）
     prompt_len = len(prompt)
-    logger.info(f"🚀 LLM 请求开始: model={model}, prompt_length={prompt_len}, max_tokens={max_tokens}")
+    prompt_preview = prompt[:200] + "..." if len(prompt) > 200 else prompt
+    logger.info(f"🚀 LLM 请求开始:")
+    logger.info(f"   model: {model}")
+    logger.info(f"   base_url: {base_url}")
+    logger.info(f"   prompt_length: {prompt_len} 字符")
+    logger.info(f"   max_tokens: {max_tokens}")
+    logger.info(f"   timeout: {timeout}s")
+    logger.info(f"   temperature: {temperature}")
+    logger.info(f"   prompt_preview: {prompt_preview}")
 
     try:
         response = client.chat.completions.create(
@@ -116,25 +179,31 @@ def call_llm(
         usage = response.usage
 
         # 记录成功信息
-        logger.info(
-            f"✅ LLM 请求成功: "
-            f"prompt_tokens={usage.prompt_tokens if usage else 'N/A'}, "
-            f"completion_tokens={usage.completion_tokens if usage else 'N/A'}, "
-            f"response_length={len(content)}"
-        )
+        logger.info(f"✅ LLM 请求成功:")
+        if usage:
+            logger.info(f"   prompt_tokens: {usage.prompt_tokens}")
+            logger.info(f"   completion_tokens: {usage.completion_tokens}")
+            logger.info(f"   total_tokens: usage.prompt_tokens + usage.completion_tokens")
+        logger.info(f"   response_length: {len(content)} 字符")
 
         return content, None
 
     except APITimeoutError as e:
-        error_msg = f"⏰ LLM 请求超时: {str(e)}"
+        error_msg = f"⏰ LLM 请求超时 (timeout={timeout}s): {str(e)}"
         logger.error(error_msg)
-        logger.error(f"   超时设置: {timeout}s, prompt_length: {prompt_len}")
+        logger.error(f"   prompt_length: {prompt_len}")
+        logger.error(f"   建议: 增加 timeout 或减少 prompt 长度")
         return "", error_msg
 
     except APIConnectionError as e:
         error_msg = f"🔌 LLM 连接错误: {str(e)}"
         logger.error(error_msg)
-        logger.error(f"   请检查网络连接和 BASE_URL: {os.getenv('BASE_URL')}")
+        logger.error(f"   base_url: {base_url}")
+        logger.error(f"   请检查:")
+        logger.error(f"   1. 网络连接是否正常")
+        logger.error(f"   2. BASE_URL 是否正确: {base_url}")
+        logger.error(f"   3. 是否需要配置代理 (HTTP_PROXY/HTTPS_PROXY)")
+        logger.error(f"   4. 防火墙是否阻止了连接")
         return "", error_msg
 
     except RateLimitError as e:
@@ -170,7 +239,7 @@ class LLMClient:
         prompt: str,
         system_prompt: str = "",
         temperature: float = 0.3,
-        max_tokens: int = 4096,
+        max_tokens: int = 8192,
     ) -> tuple[str, Optional[str]]:
         """
         调用 LLM 获取响应
@@ -189,7 +258,7 @@ class LLMClient:
                 messages=messages,
                 temperature=temperature,
                 max_tokens=max_tokens,
-                timeout=180.0,
+                timeout=300.0,
             )
             return response.choices[0].message.content, None
 
@@ -201,8 +270,14 @@ class LLMClient:
 
 # 启动时检查环境变量
 if __name__ == "__main__":
-    logging.basicConfig(level=logging.INFO)
+    logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(name)s] %(levelname)s: %(message)s")
     env_status = check_env_variables()
-    print("=== 环境变量检查 ===")
+    print("\n=== 环境变量检查 ===")
     for key, value in env_status.items():
         print(f"  {key}: {value}")
+    print("\n=== 测试 LLM 连接 ===")
+    result, error = call_llm("Hello, this is a test.", max_tokens=50)
+    if error:
+        print(f"❌ 测试失败: {error}")
+    else:
+        print(f"✅ 测试成功: {result[:100]}")
