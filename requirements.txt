@@ -1,0 +1,37 @@
+# AI 市场调研报告生成系统 - 依赖清单
+# Python 3.10+
+
+# 大模型 API（DeepSeek 兼容 OpenAI SDK）
+openai>=1.0.0
+
+# 向量数据库 + 轻量嵌入（onnxruntime，无需下载 1GB+ 模型）
+chromadb>=0.4.0
+onnxruntime>=1.16.0
+numpy>=1.24.0
+
+# PDF 解析
+pypdf>=3.0.0
+
+# 前端界面（旧版 Streamlit 版本仍保留）
+streamlit>=1.28.0
+
+# 环境变量管理
+python-dotenv>=1.0.0
+
+# FastAPI 后端框架
+fastapi>=0.104.0
+uvicorn>=0.24.0
+aiofiles>=23.0.0
+python-multipart>=0.0.6
+
+# RSS 新闻抓取
+feedparser>=6.0.0
+
+# Firecrawl AI 爬虫（替代/补充 RSS）
+firecrawl-py>=1.0.0
+
+# 定时任务调度
+apscheduler>=3.10.0
+
+# 中文分词（标签提取）
+jieba>=0.42.1

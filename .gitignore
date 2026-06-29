@@ -1,0 +1,57 @@
+# 环境变量（包含 API Key）
+.env
+.env.local
+.env.*.local
+
+# Python 缓存
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.Python
+*.so
+*.egg
+*.egg-info/
+dist/
+build/
+*.whl
+
+# 虚拟环境
+venv/
+env/
+.venv/
+ENV/
+env*/
+
+# IDE 配置
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# 项目数据（运行时生成，不提交）
+crawled_data/
+reports/
+memory_db/
+uploads/
+*.db
+*.sqlite
+*.sqlite3
+
+# ChromaDB 持久化
+chroma_db/
+
+# 日志文件
+*.log
+logs/
+
+# 操作系统
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# 临时文件
+*.tmp
+*.temp
+.cache/
