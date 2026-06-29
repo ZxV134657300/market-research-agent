@@ -404,6 +404,25 @@ const App = {
     // 既没上传文件，也没开爬取数据
     if (!hasFiles && !useCrawled) return;
 
+    // ── 清空日志容器 ──
+    const logBox = document.getElementById('log-box');
+    if (logBox) logBox.innerHTML = '';
+
+    // ── 重置进度条 ──
+    const progressBar = document.getElementById('progress-bar');
+    const progressText = document.getElementById('progress-text');
+    if (progressBar) progressBar.style.width = '0%';
+    if (progressText) progressText.textContent = '0%';
+
+    // ── 重置所有步骤状态 ──
+    const names = ['collector', 'analyst', 'writer', 'reviewer'];
+    names.forEach(name => {
+      const stepEl = document.getElementById(`step-${name}`);
+      const msgEl = document.getElementById(`step-msg-${name}`);
+      if (stepEl) stepEl.className = 'step pending';
+      if (msgEl) msgEl.textContent = '等待中';
+    });
+
     const btn = document.getElementById('btn-generate');
     btn.disabled = true;
     btn.innerHTML = `
