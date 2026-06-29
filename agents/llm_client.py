@@ -11,7 +11,12 @@ def get_llm_client() -> OpenAI:
     """获取 OpenAI 兼容的 LLM 客户端"""
     api_key = os.getenv("DEEPSEEK_API_KEY", "sk-placeholder")
     base_url = os.getenv("BASE_URL", "https://api.deepseek.com")
-    return OpenAI(api_key=api_key, base_url=base_url)
+    return OpenAI(
+        api_key=api_key,
+        base_url=base_url,
+        timeout=120.0,      # 2 分钟超时，适配大 prompt
+        max_retries=2,       # 失败自动重试 2 次
+    )
 
 
 def call_llm(prompt: str, system_prompt: str = "", temperature: float = 0.3) -> str:
@@ -38,6 +43,7 @@ def call_llm(prompt: str, system_prompt: str = "", temperature: float = 0.3) -> 
         model=model,
         messages=messages,
         temperature=temperature,
+        max_tokens=4096,
     )
     return response.choices[0].message.content
 
